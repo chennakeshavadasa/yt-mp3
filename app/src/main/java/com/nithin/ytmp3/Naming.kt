@@ -123,35 +123,52 @@ object Naming {
         RegexOption.IGNORE_CASE
     )
 
+    private fun clean(v: String?) = v?.takeIf { it.isNotBlank() && it != "null" }?.trim()
+
+    private fun words(s: String) = s.split(' ').count { it.isNotBlank() }
+
+    /**
+     * The visible video title is the main source. (YouTube's hidden "track" tag is
+     * unreliable – for some songs it holds only part of the name, e.g. "You"
+     * for "Run To You" – so it's only a last resort.)
+     */
     fun songName(info: JSONObject, language: String): String {
-        val track = info.optString("track").takeIf { it.isNotBlank() && it != "null" }
-        val raw = track ?: info.optString("title")
-        var name = raw
+        val title = clean(info.optString("title")) ?: ""
+        val track = clean(info.optString("track"))
 
-        if (track == null) {
-            // "Song | Movie | Singer" -> "Song"
-            name = name.split('|', '｜', '•').firstOrNull { it.isNotBlank() } ?: name
-            name = bracketNoise.replace(name, " ")
-            name = wordNoise.replace(name, " ")
-            // leftover trailing "Song" / "Songs" ("Belageddu Lyrical Video Song" -> "Belageddu")
-            name = Regex("""\s+songs?\s*$""", RegexOption.IGNORE_CASE).replace(name.trim(), "")
+        // "Song | Movie | Singer" -> "Song"
+        val firstSeg = title.split('|', '｜', '•').firstOrNull { it.isNotBlank() }?.trim() ?: title
 
-            // "Artist - Song" vs "Song - Movie": drop the part that is the channel/artist name
-            if (" - " in name || " – " in name) {
-                val parts = name.split(" - ", " – ").map { it.trim() }.filter { it.isNotEmpty() }
-                val who = listOf("artist", "creator", "uploader", "channel")
-                    .map { info.optString(it).lowercase() }
-                    .filter { it.isNotBlank() && it != "null" }
-                val rest = parts.filterNot { p -> who.any { w -> p.lowercase() == w || (p.length >= 4 && w.contains(p.lowercase())) } }
-                name = (rest.firstOrNull() ?: parts.firstOrNull() ?: name)
+        var name = bracketNoise.replace(firstSeg, " ")
+        name = wordNoise.replace(name, " ")
+        // leftover trailing "Song" / "Songs" ("Belageddu Lyrical Video Song" -> "Belageddu")
+        name = Regex("""\s+songs?\s*$""", RegexOption.IGNORE_CASE).replace(name.trim(), "")
+
+        // "Artist - Song" vs "Song - Movie": drop the part that is exactly the channel/artist name
+        if (" - " in name || " – " in name) {
+            val parts = name.split(" - ", " – ").map { it.trim() }.filter { it.isNotEmpty() }
+            val who = listOf("artist", "creator", "uploader", "channel")
+                .mapNotNull { clean(info.optString(it))?.lowercase() }
+            val rest = parts.filterNot { p ->
+                val pl = p.lowercase()
+                who.any { w -> pl == w || (pl.length >= 6 && w.startsWith(pl)) }
             }
+            name = rest.firstOrNull() ?: parts.firstOrNull() ?: name
         }
 
         // Don't repeat the language: "Kesariya Hindi" -> "Kesariya"
         if (language != "Unknown") {
             name = Regex("""\b${language}\b(\s+songs?)?""", RegexOption.IGNORE_CASE).replace(name, " ")
         }
-        return sanitize(name)
+        name = sanitize(name)
+
+        // Safety net: cleaning must never shrink a real title to a fragment.
+        val plain = sanitize(bracketNoise.replace(firstSeg, " ")).ifBlank { sanitize(firstSeg) }
+        if (name.length < 3 || (words(name) == 1 && words(plain) >= 3 && name.length <= 5)) {
+            name = plain
+        }
+        if (name.isBlank()) name = track?.let { sanitize(it) } ?: ""
+        return name
     }
 
     fun sanitize(s: String): String =
