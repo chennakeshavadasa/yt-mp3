@@ -20,6 +20,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.textfield.TextInputEditText
@@ -150,6 +151,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        findViewById<MaterialButton>(R.id.appUpdateBtn).setOnClickListener { checkAppUpdate(manual = true) }
+        findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).subtitle =
+            "Version ${BuildConfig.VERSION_NAME}"
+        if (savedInstanceState == null) checkAppUpdate(manual = false)
+
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
@@ -181,6 +187,59 @@ class MainActivity : AppCompatActivity() {
         playlistSwitch.isChecked = Links.looksLikeCollection(url)
         startDownload()
     }
+
+    // ------------------------------------------------------------ app self-update
+
+    private fun checkAppUpdate(manual: Boolean) {
+        lifecycleScope.launch {
+            val rel = withContext(Dispatchers.IO) { Updater.latest() }
+            when {
+                rel == null -> if (manual) toast("Couldn't check for updates (offline, or the GitHub repo is private)")
+                rel.build <= Updater.currentBuild -> if (manual) toast("You have the latest version (build ${Updater.currentBuild})")
+                else -> MaterialAlertDialogBuilder(this@MainActivity)
+                    .setTitle("Update available")
+                    .setMessage("Build ${rel.build} is ready (you have build ${Updater.currentBuild}).\n" +
+                        "Download ${"%.0f".format(rel.sizeMb)} MB and install?")
+                    .setPositiveButton("Update") { _, _ -> downloadAndInstall(rel) }
+                    .setNegativeButton("Later", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun downloadAndInstall(rel: Updater.Release) {
+        if (!Updater.canInstall(this)) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("One-time permission")
+                .setMessage("Turn on “Allow from this source” on the next screen, come back, and tap Update again.")
+                .setPositiveButton("Open settings") { _, _ -> Updater.openInstallPermission(this) }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+        val bar = LinearProgressIndicator(this).apply { max = 100; setPadding(64, 32, 64, 0) }
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle("Downloading update…")
+            .setView(bar)
+            .setCancelable(false)
+            .show()
+        lifecycleScope.launch {
+            try {
+                val apk = withContext(Dispatchers.IO) {
+                    Updater.download(applicationContext, rel) { pct ->
+                        runOnUiThread { bar.setProgressCompat(pct, true) }
+                    }
+                }
+                dialog.dismiss()
+                Updater.install(this@MainActivity, apk)
+            } catch (e: Exception) {
+                dialog.dismiss()
+                toast("Update download failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
     private fun updateAccountText() {
         accountText.text = if (YouTubeBrowserActivity.isSignedIn(this))
