@@ -17,7 +17,6 @@ android {
     }
 
     // Fixed key so every new build installs over the previous one.
-    // Keep this repository PRIVATE.
     signingConfigs {
         create("release") {
             storeFile = file("release.keystore")

@@ -219,6 +219,8 @@ class DownloadService : Service() {
         trackMode: Boolean,
         extra: List<Pair<String, String>> = emptyList()
     ) {
+        // Decrypted sign-in cookies exist only for the length of this download
+        val cookieTemp = YouTubeBrowserActivity.exportForDownload(this)
         val req = YoutubeDLRequest(target).apply {
             addOption("-f", "bestaudio/best")
             addOption("-x")
@@ -242,8 +244,7 @@ class DownloadService : Service() {
             }
             if (!trackMode) addOption(if (collection) "--yes-playlist" else "--no-playlist")
             // Signed in via "My YouTube": lets yt-dlp read private playlists (Sounds, Liked…)
-            val cookies = YouTubeBrowserActivity.cookieFile(this@DownloadService)
-            if (cookies.exists() && cookies.length() > 0) addOption("--cookies", cookies.absolutePath)
+            cookieTemp?.let { addOption("--cookies", it.absolutePath) }
             // Temporary names are the video id; the final name is set when saving.
             addOption("-o", tmp.absolutePath + "/%(id)s.%(ext)s")
         }
@@ -291,6 +292,7 @@ class DownloadService : Service() {
             }
         } finally {
             processId = null
+            cookieTemp?.delete()
         }
     }
 

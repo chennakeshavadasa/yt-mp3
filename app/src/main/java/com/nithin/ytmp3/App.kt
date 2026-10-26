@@ -56,6 +56,8 @@ class App : Application() {
         createNotificationChannel()
         // Unpacking python/ffmpeg takes a few seconds on first launch: keep it off the UI thread.
         scope.launch {
+            // Never leave decrypted sign-in data lying around (e.g. after a crash)
+            noBackupFilesDir.listFiles { f -> f.name.startsWith("c-") }?.forEach { it.delete() }
             // Free space left by interrupted downloads / installed updates
             if (!DownloadState.ui.value.running) java.io.File(cacheDir, "dl").deleteRecursively()
             java.io.File(cacheDir, "updates").listFiles()?.forEach { f ->

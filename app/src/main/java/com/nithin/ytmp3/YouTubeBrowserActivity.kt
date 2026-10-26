@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
@@ -30,18 +31,47 @@ class YouTubeBrowserActivity : AppCompatActivity() {
             "https://accounts.google.com/ServiceLogin?service=youtube&continue=" +
                 "https%3A%2F%2Fm.youtube.com%2Ffeed%2Fplaylists"
 
-        fun cookieFile(ctx: Context) = File(ctx.filesDir, "youtube_cookies.txt")
+        /** Encrypted (Android Keystore) copy of the sign-in cookies. */
+        private fun encFile(ctx: Context) = File(ctx.filesDir, "youtube_cookies.enc")
 
-        fun isSignedIn(ctx: Context) = cookieFile(ctx).let { it.exists() && it.length() > 0 }
+        /** Old plain-text file from earlier versions – migrated and removed. */
+        private fun legacyFile(ctx: Context) = File(ctx.filesDir, "youtube_cookies.txt")
+
+        fun isSignedIn(ctx: Context): Boolean {
+            migrate(ctx)
+            return encFile(ctx).let { it.exists() && it.length() > 0 }
+        }
+
+        private fun migrate(ctx: Context) {
+            val old = legacyFile(ctx)
+            if (old.exists()) {
+                runCatching { SecureStore.write(encFile(ctx), old.readBytes()) }
+                old.delete()
+            }
+        }
+
+        /**
+         * Decrypts the cookies into a private temp file for yt-dlp. The caller must
+         * delete it as soon as the download ends. Returns null when not signed in.
+         */
+        fun exportForDownload(ctx: Context): File? {
+            if (!isSignedIn(ctx)) return null
+            val plain = SecureStore.read(encFile(ctx)) ?: return null
+            val f = File(ctx.noBackupFilesDir, "c-${System.nanoTime()}.txt")
+            f.writeBytes(plain)
+            plain.fill(0)
+            return f
+        }
 
         fun signOut(ctx: Context) {
-            cookieFile(ctx).delete()
+            encFile(ctx).delete()
+            legacyFile(ctx).delete()
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
         }
 
         /**
-         * Write the WebView's YouTube cookies in Netscape cookies.txt format for yt-dlp.
+         * Store the WebView's YouTube cookies (encrypted) in the cookies.txt format yt-dlp reads.
          * Returns true if the account looks signed in.
          */
         fun saveCookies(ctx: Context): Boolean {
@@ -57,8 +87,21 @@ class YouTubeBrowserActivity : AppCompatActivity() {
                 if (name in setOf("SID", "SAPISID", "__Secure-3PSID", "LOGIN_INFO")) signedIn = true
                 sb.append(".youtube.com\tTRUE\t/\tTRUE\t$expiry\t$name\t$value\n")
             }
-            cookieFile(ctx).writeText(sb.toString())
+            if (signedIn) SecureStore.write(encFile(ctx), sb.toString().toByteArray())
+            legacyFile(ctx).delete()
             return signedIn
+        }
+
+        /** Only Google/YouTube pages may load in the sign-in browser. */
+        private val allowedHosts = listOf(
+            "youtube.com", "youtu.be", "google.com", "google.co.in", "gstatic.com",
+            "googleusercontent.com", "googleapis.com", "ggpht.com", "ytimg.com", "googlevideo.com"
+        )
+
+        fun isAllowed(url: String?): Boolean {
+            val host = runCatching { Uri.parse(url).host?.lowercase() }.getOrNull() ?: return false
+            if (!url!!.startsWith("https://")) return false
+            return allowedHosts.any { host == it || host.endsWith(".$it") }
         }
     }
 
@@ -82,11 +125,22 @@ class YouTubeBrowserActivity : AppCompatActivity() {
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            // Hardening: no access to phone files, no mixed http content
+            allowFileAccess = false
+            allowContentAccess = false
+            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            setGeolocationEnabled(false)
+            javaScriptCanOpenWindowsAutomatically = false
             // Look like normal Chrome so Google allows the sign-in page
             userAgentString = userAgentString.replace("; wv", "").replace(Regex("""Version/\S+\s"""), "")
         }
         web.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest) = false
+            // Block anything that isn't a Google/YouTube https page
+            override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
+                val ok = isAllowed(req.url.toString())
+                if (!ok) Toast.makeText(this@YouTubeBrowserActivity, "Blocked: only YouTube/Google pages open here", Toast.LENGTH_SHORT).show()
+                return !ok
+            }
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = refresh(url)
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) = refresh(url)
         }
@@ -119,7 +173,6 @@ class YouTubeBrowserActivity : AppCompatActivity() {
     private fun finishSaving(url: String?) {
         val signedIn = saveCookies(this)
         if (!signedIn) {
-            cookieFile(this).delete()
             if (url != null) Toast.makeText(this, "Not signed in – private playlists won't work", Toast.LENGTH_LONG).show()
         }
         val data = Intent().apply { if (url != null) putExtra(RESULT_URL, url.replace("://m.youtube.com", "://www.youtube.com")) }

@@ -23,13 +23,23 @@ object Updater {
 
     val currentBuild: Int get() = BuildConfig.VERSION_CODE
 
-    private fun open(url: String): HttpURLConnection =
-        (URL(url).openConnection() as HttpURLConnection).apply {
+    /** Updates are only fetched over HTTPS from GitHub. */
+    private fun trusted(url: String): Boolean {
+        val u = URL(url)
+        val h = u.host.lowercase()
+        return u.protocol == "https" && (h == "github.com" || h == "api.github.com" ||
+            h.endsWith(".githubusercontent.com"))
+    }
+
+    private fun open(url: String): HttpURLConnection {
+        if (!trusted(url)) throw SecurityException("Untrusted update host: ${URL(url).host}")
+        return (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 30_000
-            instanceFollowRedirects = true
+            instanceFollowRedirects = false   // each redirect is checked by trusted()
             setRequestProperty("User-Agent", "YT-MP3-app")
         }
+    }
 
     /** Newest release, or null if it can't be read (offline, private repo…). Blocking. */
     fun latest(): Release? = try {
@@ -102,7 +112,35 @@ object Updater {
         )
     }
 
+    /**
+     * Refuse any APK that isn't this same app signed with this same key
+     * (protects against a tampered or fake update).
+     */
+    @Suppress("DEPRECATION")
+    private fun signers(info: android.content.pm.PackageInfo?): Set<Int> {
+        val modern = info?.signingInfo?.apkContentsSigners
+        val list = if (!modern.isNullOrEmpty()) modern else info?.signatures
+        return list?.map { it.toByteArray().contentHashCode() }?.toSet() ?: emptySet()
+    }
+
+    @Suppress("DEPRECATION")
+    fun verify(ctx: Context, apk: File) {
+        val pm = ctx.packageManager
+        val flags = android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES or
+            android.content.pm.PackageManager.GET_SIGNATURES
+        val newInfo = pm.getPackageArchiveInfo(apk.absolutePath, flags)
+            ?: throw SecurityException("Downloaded file is not a valid app")
+        if (newInfo.packageName != ctx.packageName) throw SecurityException("Update is a different app")
+        val mine = signers(pm.getPackageInfo(ctx.packageName, flags))
+        val theirs = signers(newInfo)
+        if (mine.isEmpty() || mine != theirs) {
+            apk.delete()
+            throw SecurityException("Update signature doesn't match – not installing")
+        }
+    }
+
     fun install(ctx: Context, apk: File) {
+        verify(ctx, apk)
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", apk)
         ctx.startActivity(
             Intent(Intent.ACTION_VIEW)
