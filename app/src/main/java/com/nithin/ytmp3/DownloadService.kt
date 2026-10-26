@@ -134,21 +134,96 @@ class DownloadService : Service() {
     }
 
     private fun process(task: Task) {
+        if (Spotify.isSpotify(task.url)) { processSpotify(task); return }
+
         val tmp = File(cacheDir, "dl/${System.currentTimeMillis()}").apply { mkdirs() }
         DownloadState.update {
             it.copy(status = "Fetching info…", title = task.url, progress = 0, itemIndex = 0, itemCount = 0)
         }
         notifyProgress("Fetching info…", task.url, 0, true, force = true)
 
-        val req = YoutubeDLRequest(task.url).apply {
+        runYtDlp(task.url, task.collection, task.quality, tmp, trackMode = false)
+
+        // Save whatever finished (also after errors in part of a playlist)
+        val before = sessionSaved
+        sweep(tmp, isFinal = true)
+        if (sessionSaved == before && !cancelled) {
+            sessionFailed++
+            DownloadState.update {
+                it.copy(failed = sessionFailed, status = "Failed – see log. Try “Update engine”.")
+            }
+        }
+        tmp.deleteRecursively()
+    }
+
+    /** Spotify: read the song list, then download each song's best YouTube match. */
+    private fun processSpotify(task: Task) {
+        DownloadState.update {
+            it.copy(status = "Reading Spotify list…", title = task.url, progress = 0, itemIndex = 0, itemCount = 0)
+        }
+        notifyProgress("Reading Spotify list…", task.url, 0, true, force = true)
+
+        val list = try {
+            Spotify.fetch(task.url)
+        } catch (e: Exception) {
+            DownloadState.log("ERROR (Spotify): ${e.message}")
+            sessionFailed++
+            DownloadState.update { it.copy(failed = sessionFailed, status = "Couldn't read that Spotify link") }
+            return
+        }
+        DownloadState.log("Spotify: ${list.name} · ${list.tracks.size} song(s)")
+
+        list.tracks.forEachIndexed { i, t ->
+            if (cancelled) return
+            DownloadState.update {
+                it.copy(
+                    itemIndex = i + 1, itemCount = list.tracks.size, progress = 0,
+                    status = "Searching YouTube…", title = "${t.title} – ${t.artist}"
+                )
+            }
+            val tmp = File(cacheDir, "dl/sp-${System.currentTimeMillis()}").apply { mkdirs() }
+            // "Official audio" helps pick the studio version over live/cover videos
+            val query = "ytsearch1:${t.title} ${t.artist} official audio"
+            runYtDlp(
+                query, false, task.quality, tmp, trackMode = true,
+                extra = listOf(
+                    "--parse-metadata" to "${literal(t.title)}:(?P<meta_title>.+)",
+                    "--parse-metadata" to "${literal(t.artist)}:(?P<meta_artist>.+)"
+                )
+            )
+            val before = sessionSaved
+            sweep(tmp, isFinal = true) { info -> Naming.fileBaseFor(info, t.title) }
+            if (sessionSaved == before && !cancelled) {
+                sessionFailed++
+                DownloadState.update { it.copy(failed = sessionFailed) }
+                DownloadState.log("Not found on YouTube: ${t.title} – ${t.artist}")
+            }
+            tmp.deleteRecursively()
+        }
+    }
+
+    /** Text used as a yt-dlp template literal: no field markers, no ':' separators. */
+    private fun literal(s: String) =
+        s.replace("%", "%%").replace(":", " ").replace(Regex("""\s+"""), " ").trim().ifBlank { "Unknown" }
+
+    private fun runYtDlp(
+        target: String,
+        collection: Boolean,
+        quality: String,
+        tmp: File,
+        trackMode: Boolean,
+        extra: List<Pair<String, String>> = emptyList()
+    ) {
+        val req = YoutubeDLRequest(target).apply {
             addOption("-f", "bestaudio/best")
             addOption("-x")
-            if (task.quality == "best") {
+            if (quality == "best") {
                 addOption("--audio-format", "best")
             } else {
                 addOption("--audio-format", "mp3")
-                addOption("--audio-quality", "${task.quality}K")
+                addOption("--audio-quality", "${quality}K")
             }
+            for ((k, v) in extra) addOption(k, v)
             addOption("--embed-metadata")
             addOption("--embed-thumbnail")
             addOption("--convert-thumbnails", "jpg")
@@ -156,7 +231,7 @@ class DownloadService : Service() {
             addOption("--no-write-playlist-metafiles")
             addOption("--ignore-errors")                // skip private/removed videos in a playlist
             addOption("--no-mtime")
-            addOption(if (task.collection) "--yes-playlist" else "--no-playlist")
+            if (!trackMode) addOption(if (collection) "--yes-playlist" else "--no-playlist")
             // Signed in via "My YouTube": lets yt-dlp read private playlists (Sounds, Liked…)
             val cookies = YouTubeBrowserActivity.cookieFile(this@DownloadService)
             if (cookies.exists() && cookies.length() > 0) addOption("--cookies", cookies.absolutePath)
@@ -172,7 +247,7 @@ class DownloadService : Service() {
         try {
             YoutubeDL.getInstance().execute(req, id, false) { progress, _, line ->
                 DownloadState.log(line)
-                itemRe.find(line)?.let { m ->
+                if (!trackMode) itemRe.find(line)?.let { m ->
                     val i = m.groupValues[1].toInt()
                     val n = m.groupValues[2].toInt()
                     sweep(tmp, isFinal = false)      // previous item is finished: save it now
@@ -204,17 +279,6 @@ class DownloadService : Service() {
         } finally {
             processId = null
         }
-
-        // Save whatever finished (also after errors in part of a playlist)
-        val before = sessionSaved
-        sweep(tmp, isFinal = true)
-        if (sessionSaved == before && !cancelled) {
-            sessionFailed++
-            DownloadState.update {
-                it.copy(failed = sessionFailed, status = "Failed – see log. Try “Update engine”.")
-            }
-        }
-        tmp.deleteRecursively()
     }
 
     /**
@@ -222,7 +286,7 @@ class DownloadService : Service() {
      * renamed to SongName_Language.ext.
      */
     @Synchronized
-    private fun sweep(tmp: File, isFinal: Boolean) {
+    private fun sweep(tmp: File, isFinal: Boolean, nameFor: ((JSONObject) -> String)? = null) {
         val files = tmp.walkTopDown()
             .filter { it.isFile }
             .filter { it.extension.lowercase() in AUDIO_EXT }
@@ -241,7 +305,7 @@ class DownloadService : Service() {
             } catch (e: Exception) {
                 JSONObject().put("id", base)
             }
-            val name = Naming.fileBase(info) + "." + audio.extension.lowercase()
+            val name = (nameFor?.invoke(info) ?: Naming.fileBase(info)) + "." + audio.extension.lowercase()
             val sub = ""   // everything (singles and playlists) goes in Download/YT-MP3
 
             if (saveToDownloads(audio, name, sub)) {

@@ -267,8 +267,8 @@ class MainActivity : AppCompatActivity() {
             urlLayout.error = "Paste a YouTube link first"
             return
         }
-        if (!Links.isYouTube(url)) {
-            urlLayout.error = "That's not a YouTube link (YouTube → Share → Copy link)"
+        if (!Links.isSupported(url)) {
+            urlLayout.error = "Use a YouTube or Spotify link (Share → Copy link)"
             return
         }
         DownloadService.start(this, url, playlistSwitch.isChecked, quality)

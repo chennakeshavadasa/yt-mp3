@@ -15,6 +15,8 @@ object Links {
         return null
     }
 
+    fun isSupported(url: String) = isYouTube(url) || Spotify.isSpotify(url)
+
     fun isYouTube(url: String): Boolean {
         val host = Regex("""^https?://([^/?#]+)""", RegexOption.IGNORE_CASE)
             .find(url)?.groupValues?.get(1)?.lowercase() ?: return false

@@ -1,6 +1,8 @@
 # YT MP3 – Android
 
-Paste or share a YouTube link → get MP3s in `Download/YT-MP3`.
+Paste or share a YouTube **or Spotify** link → get MP3s in `Download/YT-MP3`.
+
+- **Spotify** track / album / playlist → the song list is read from Spotify (its audio is DRM-locked), each song is found on YouTube and saved as `SpotifyTitle_Language.mp3`. Public lists only (not private Liked Songs).
 
 - **Single video** → `Download/YT-MP3/SongName_Language.mp3`
 - **Playlist or channel** (turn on *Download the whole playlist / channel*) →
