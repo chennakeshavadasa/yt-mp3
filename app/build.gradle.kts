@@ -11,8 +11,8 @@ android {
         applicationId = "com.nithin.ytmp3"
         minSdk = 29          // Android 10+
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1   // = GitHub build number
+        versionName = "build-$versionCode"
 
         ndk {
             // Real phones only (keeps the APK much smaller)
@@ -47,6 +47,10 @@ android {
     }
 
     // Required by youtubedl-android (bundled python / ffmpeg binaries)
+    buildFeatures {
+        buildConfig = true
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
