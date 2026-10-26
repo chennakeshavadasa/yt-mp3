@@ -11,8 +11,8 @@ android {
         applicationId = "com.nithin.ytmp3"
         minSdk = 29          // Android 10+
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
 
         ndk {
             // Real phones only (keeps the APK much smaller)
