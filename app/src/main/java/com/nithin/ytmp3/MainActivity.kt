@@ -8,8 +8,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.inputmethod.EditorInfo
-import android.widget.ArrayAdapter
-import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,7 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var urlLayout: TextInputLayout
     private lateinit var urlInput: TextInputEditText
     private lateinit var playlistSwitch: MaterialSwitch
-    private lateinit var qualityDropdown: AutoCompleteTextView
+    private lateinit var qualityGroup: com.google.android.material.chip.ChipGroup
     private lateinit var downloadBtn: MaterialButton
     private lateinit var cancelBtn: MaterialButton
     private lateinit var statusText: TextView
@@ -48,14 +46,6 @@ class MainActivity : AppCompatActivity() {
 
     private val prefs by lazy { getSharedPreferences("settings", MODE_PRIVATE) }
 
-    private val qualities = listOf("320", "256", "192", "128", "best")
-    private val qualityLabels = listOf(
-        "MP3 · 320 kbps",
-        "MP3 · 256 kbps",
-        "MP3 · 192 kbps",
-        "MP3 · 128 kbps",
-        "Original audio (no re-encode, not MP3)"
-    )
     private var quality = "320"
     private var userTouchedSwitch = false
 
@@ -81,7 +71,7 @@ class MainActivity : AppCompatActivity() {
         urlLayout = findViewById(R.id.urlLayout)
         urlInput = findViewById(R.id.urlInput)
         playlistSwitch = findViewById(R.id.playlistSwitch)
-        qualityDropdown = findViewById(R.id.qualityDropdown)
+        qualityGroup = findViewById(R.id.qualityGroup)
         downloadBtn = findViewById(R.id.downloadBtn)
         cancelBtn = findViewById(R.id.cancelBtn)
         statusText = findViewById(R.id.statusText)
@@ -95,12 +85,14 @@ class MainActivity : AppCompatActivity() {
 
         // Quality picker (remembered)
         quality = prefs.getString("quality", "320") ?: "320"
-        qualityDropdown.setAdapter(
-            ArrayAdapter(this, android.R.layout.simple_list_item_1, qualityLabels)
+        val chipFor = mapOf(
+            "128" to R.id.q128, "192" to R.id.q192, "256" to R.id.q256,
+            "320" to R.id.q320, "best" to R.id.qBest
         )
-        qualityDropdown.setText(qualityLabels[qualities.indexOf(quality).coerceAtLeast(0)], false)
-        qualityDropdown.setOnItemClickListener { _, _, pos, _ ->
-            quality = qualities[pos]
+        qualityGroup.check(chipFor[quality] ?: R.id.q320)
+        qualityGroup.setOnCheckedStateChangeListener { _, ids ->
+            val picked = chipFor.entries.firstOrNull { it.value == ids.firstOrNull() }?.key ?: return@setOnCheckedStateChangeListener
+            quality = picked
             prefs.edit().putString("quality", quality).apply()
         }
 

@@ -79,19 +79,56 @@
                 android:layout_marginTop="8dp"
                 android:text="Download the whole playlist / channel" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedExposedDropdownMenuStyle"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:hint="Audio quality">
+                android:layout_marginTop="12dp"
+                android:text="Audio quality"
+                android:textAppearance="?attr/textAppearanceLabelLarge" />
 
-                <AutoCompleteTextView
-                    android:id="@+id/qualityDropdown"
-                    android:layout_width="match_parent"
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/qualityGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/q128"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:inputType="none" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:text="128 kbps" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/q192"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="192 kbps" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/q256"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="256 kbps" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/q320"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="320 kbps" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/qBest"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Original (not MP3)" />
+            </com.google.android.material.chip.ChipGroup>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/downloadBtn"
