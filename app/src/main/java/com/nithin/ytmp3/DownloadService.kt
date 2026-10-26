@@ -157,6 +157,9 @@ class DownloadService : Service() {
             addOption("--ignore-errors")                // skip private/removed videos in a playlist
             addOption("--no-mtime")
             addOption(if (task.collection) "--yes-playlist" else "--no-playlist")
+            // Signed in via "My YouTube": lets yt-dlp read private playlists (Sounds, Liked…)
+            val cookies = YouTubeBrowserActivity.cookieFile(this@DownloadService)
+            if (cookies.exists() && cookies.length() > 0) addOption("--cookies", cookies.absolutePath)
             // Temporary names are the video id; the final name is set when saving.
             addOption("-o", tmp.absolutePath + "/%(id)s.%(ext)s")
         }

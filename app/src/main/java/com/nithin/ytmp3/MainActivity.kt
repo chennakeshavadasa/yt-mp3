@@ -58,6 +58,18 @@ class MainActivity : AppCompatActivity() {
     private var quality = "320"
     private var userTouchedSwitch = false
 
+    private lateinit var accountText: TextView
+
+    private val browseYouTube =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+            updateAccountText()
+            val url = res.data?.getStringExtra(YouTubeBrowserActivity.RESULT_URL) ?: return@registerForActivityResult
+            userTouchedSwitch = false
+            urlInput.setText(url)
+            playlistSwitch.isChecked = "list=" in url
+            startDownload()
+        }
+
     private val notifPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -92,6 +104,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<MaterialButton>(R.id.pasteBtn).setOnClickListener { pasteFromClipboard() }
+
+        accountText = findViewById(R.id.accountText)
+        accountText.setOnClickListener {
+            if (YouTubeBrowserActivity.isSignedIn(this)) {
+                YouTubeBrowserActivity.signOut(this)
+                updateAccountText()
+                Toast.makeText(this, "Signed out", Toast.LENGTH_SHORT).show()
+            }
+        }
+        updateAccountText()
+        findViewById<MaterialButton>(R.id.myYoutubeBtn).setOnClickListener {
+            browseYouTube.launch(Intent(this, YouTubeBrowserActivity::class.java))
+        }
 
         urlInput.doAfterTextChanged { text ->
             urlLayout.error = null
@@ -155,6 +180,13 @@ class MainActivity : AppCompatActivity() {
         urlInput.setText(url)
         playlistSwitch.isChecked = Links.looksLikeCollection(url)
         startDownload()
+    }
+
+    private fun updateAccountText() {
+        accountText.text = if (YouTubeBrowserActivity.isSignedIn(this))
+            "Signed in to YouTube ✓ (private playlists work) · tap to sign out"
+        else
+            "Tip: “My YouTube” lets you sign in and download private lists like Sounds"
     }
 
     private fun pasteFromClipboard() {
