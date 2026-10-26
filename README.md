@@ -4,7 +4,7 @@ Paste or share a YouTube link → get MP3s in `Download/YT-MP3`.
 
 - **Single video** → `Download/YT-MP3/SongName_Language.mp3`
 - **Playlist or channel** (turn on *Download the whole playlist / channel*) →
-  `Download/YT-MP3/<Playlist name>/SongName_Language.mp3`, saved one by one as each song finishes
+  `Download/YT-MP3/SongName_Language.mp3` (same folder as single songs), saved one by one as each song finishes
 - Quality: MP3 320 / 256 / 192 / 128 kbps, or the original audio without re-encoding
 - Cover art + title/artist tags embedded
 - Runs in the background with a progress notification; links queue up

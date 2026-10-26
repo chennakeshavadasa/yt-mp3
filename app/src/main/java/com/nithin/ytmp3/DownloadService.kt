@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * Foreground service that downloads one link at a time (a link can be a whole
- * playlist/channel), converts to MP3 and saves into Download/YT-MP3[/Playlist name].
+ * playlist/channel), converts to MP3 and saves into Download/YT-MP3.
  * Runs with the screen off and keeps going if you leave the app.
  */
 class DownloadService : Service() {
@@ -158,7 +158,7 @@ class DownloadService : Service() {
             addOption("--no-mtime")
             addOption(if (task.collection) "--yes-playlist" else "--no-playlist")
             // Temporary names are the video id; the final name is set when saving.
-            addOption("-o", tmp.absolutePath + "/%(playlist_title|)s/%(id)s.%(ext)s")
+            addOption("-o", tmp.absolutePath + "/%(id)s.%(ext)s")
         }
 
         val itemRe = Regex("""Downloading (?:item|video) (\d+) of (\d+)""")
@@ -216,7 +216,7 @@ class DownloadService : Service() {
 
     /**
      * Move finished audio files out of the temp folder into Download/YT-MP3,
-     * renamed to SongName_Language.ext (playlist items go in a sub-folder).
+     * renamed to SongName_Language.ext.
      */
     @Synchronized
     private fun sweep(tmp: File, isFinal: Boolean) {
@@ -239,10 +239,7 @@ class DownloadService : Service() {
                 JSONObject().put("id", base)
             }
             val name = Naming.fileBase(info) + "." + audio.extension.lowercase()
-            val sub = audio.parentFile!!.relativeTo(tmp).path
-                .split(File.separatorChar)
-                .filter { it.isNotBlank() }
-                .joinToString("/") { Naming.sanitize(it) }
+            val sub = ""   // everything (singles and playlists) goes in Download/YT-MP3
 
             if (saveToDownloads(audio, name, sub)) {
                 sessionSaved++
