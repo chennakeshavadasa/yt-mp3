@@ -15,6 +15,12 @@ object Links {
         return null
     }
 
+    fun isYouTube(url: String): Boolean {
+        val host = Regex("""^https?://([^/?#]+)""", RegexOption.IGNORE_CASE)
+            .find(url)?.groupValues?.get(1)?.lowercase() ?: return false
+        return host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com")
+    }
+
     /**
      * Guess whether the link means "everything": a playlist page or a channel.
      * A normal video opened from inside a playlist (watch?v=..&list=..) counts as ONE video;

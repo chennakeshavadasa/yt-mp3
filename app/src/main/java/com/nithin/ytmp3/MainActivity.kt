@@ -176,6 +176,10 @@ class MainActivity : AppCompatActivity() {
             urlLayout.error = "Paste a YouTube link first"
             return
         }
+        if (!Links.isYouTube(url)) {
+            urlLayout.error = "That's not a YouTube link (YouTube → Share → Copy link)"
+            return
+        }
         DownloadService.start(this, url, playlistSwitch.isChecked, quality)
         val what = if (playlistSwitch.isChecked) "Playlist added" else "Added"
         Toast.makeText(this, "$what to downloads", Toast.LENGTH_SHORT).show()
