@@ -46,6 +46,17 @@ object Naming {
         return "${song}_$lang"
     }
 
+    /**
+     * Spotify songs: the clean Spotify title is the song name; language comes from the
+     * YouTube match (its title/tags often say "Kannada", "Hindi"…) or the title's script.
+     */
+    fun fileBaseFor(info: JSONObject, songTitle: String): String {
+        var lang = language(info)
+        if (lang == "Unknown") lang = language(JSONObject().put("title", songTitle))
+        val song = songName(JSONObject().put("title", songTitle), lang).ifBlank { sanitize(songTitle) }
+        return "${song}_$lang"
+    }
+
     // ---------------------------------------------------------------- language
 
     fun language(info: JSONObject): String {
