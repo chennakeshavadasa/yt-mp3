@@ -56,6 +56,12 @@ class App : Application() {
         createNotificationChannel()
         // Unpacking python/ffmpeg takes a few seconds on first launch: keep it off the UI thread.
         scope.launch {
+            // Free space left by interrupted downloads / installed updates
+            if (!DownloadState.ui.value.running) java.io.File(cacheDir, "dl").deleteRecursively()
+            java.io.File(cacheDir, "updates").listFiles()?.forEach { f ->
+                val b = Regex("""build(\d+)""").find(f.name)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                if (b <= BuildConfig.VERSION_CODE) f.delete()
+            }
             try {
                 YoutubeDL.getInstance().init(this@App)
                 FFmpeg.getInstance().init(this@App)

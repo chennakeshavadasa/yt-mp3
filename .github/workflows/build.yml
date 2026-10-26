@@ -29,7 +29,11 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/*.apk "out/YT-MP3-build${{ github.run_number }}.apk"
+          for f in app/build/outputs/apk/release/*.apk; do
+            abi=$(basename "$f" .apk | sed 's/^app-//; s/-release$//')
+            cp "$f" "out/YT-MP3-build${{ github.run_number }}-$abi.apk"
+          done
+          ls -la out
 
       - uses: actions/upload-artifact@v4
         with:

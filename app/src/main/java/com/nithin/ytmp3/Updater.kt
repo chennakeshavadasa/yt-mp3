@@ -39,16 +39,16 @@ object Updater {
             val j = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
             val build = j.optString("tag_name").removePrefix("build-").toIntOrNull()
             val assets = j.optJSONArray("assets")
-            var url: String? = null
-            var size = 0.0
+            // Pick the APK built for this phone's CPU (64-bit or 32-bit)
+            val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull { it == "arm64-v8a" || it == "armeabi-v7a" }
+            val apks = mutableListOf<JSONObject>()
             if (assets != null) for (i in 0 until assets.length()) {
                 val a = assets.getJSONObject(i)
-                if (a.optString("name").endsWith(".apk")) {
-                    url = a.optString("browser_download_url")
-                    size = a.optLong("size") / 1e6
-                    break
-                }
+                if (a.optString("name").endsWith(".apk")) apks += a
             }
+            val pick = apks.firstOrNull { abi != null && abi in it.optString("name") } ?: apks.firstOrNull()
+            val url = pick?.optString("browser_download_url")
+            val size = (pick?.optLong("size") ?: 0L) / 1e6
             if (build == null || url == null) null else Release(build, url, size)
         }
     } catch (e: Exception) {

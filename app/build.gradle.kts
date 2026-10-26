@@ -14,10 +14,6 @@ android {
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1   // = GitHub build number
         versionName = "build-$versionCode"
 
-        ndk {
-            // Real phones only (keeps the APK much smaller)
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
     }
 
     // Fixed key so every new build installs over the previous one.
@@ -33,7 +29,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Shrink unused code/resources (smaller APK, faster start)
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -49,6 +48,17 @@ android {
     // Required by youtubedl-android (bundled python / ffmpeg binaries)
     buildFeatures {
         buildConfig = true
+    }
+
+    // One APK per phone type instead of one big APK with both engines.
+    // The in-app updater downloads only the one this phone needs.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
     }
 
     packaging {

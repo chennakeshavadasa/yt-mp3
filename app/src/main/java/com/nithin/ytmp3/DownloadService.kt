@@ -65,6 +65,7 @@ class DownloadService : Service() {
     private var worker: Job? = null           // touched only on the main thread
     @Volatile private var processId: String? = null
     @Volatile private var cancelled = false
+    @Volatile private var skippedAll = false   // yt-dlp said "already in archive"
     private var lastNotify = 0L
     private var sessionSaved = 0
     private var sessionFailed = 0
@@ -142,12 +143,13 @@ class DownloadService : Service() {
         }
         notifyProgress("Fetching info…", task.url, 0, true, force = true)
 
+        skippedAll = false
         runYtDlp(task.url, task.collection, task.quality, tmp, trackMode = false)
 
         // Save whatever finished (also after errors in part of a playlist)
         val before = sessionSaved
         sweep(tmp, isFinal = true)
-        if (sessionSaved == before && !cancelled) {
+        if (sessionSaved == before && !cancelled && !skippedAll) {
             sessionFailed++
             DownloadState.update {
                 it.copy(failed = sessionFailed, status = "Failed – see log. Try “Update engine”.")
@@ -182,6 +184,7 @@ class DownloadService : Service() {
                 )
             }
             val tmp = File(cacheDir, "dl/sp-${System.currentTimeMillis()}").apply { mkdirs() }
+            skippedAll = false
             // "Official audio" helps pick the studio version over live/cover videos
             val query = "ytsearch1:${t.title} ${t.artist} official audio"
             runYtDlp(
@@ -193,7 +196,9 @@ class DownloadService : Service() {
             )
             val before = sessionSaved
             sweep(tmp, isFinal = true) { info -> Naming.fileBaseFor(info, t.title) }
-            if (sessionSaved == before && !cancelled) {
+            if (skippedAll) {
+                DownloadState.log("Already downloaded: ${t.title}")
+            } else if (sessionSaved == before && !cancelled) {
                 sessionFailed++
                 DownloadState.update { it.copy(failed = sessionFailed) }
                 DownloadState.log("Not found on YouTube: ${t.title} – ${t.artist}")
@@ -231,6 +236,10 @@ class DownloadService : Service() {
             addOption("--no-write-playlist-metafiles")
             addOption("--ignore-errors")                // skip private/removed videos in a playlist
             addOption("--no-mtime")
+            // Skip songs downloaded before (re-sharing a playlist only fetches new songs)
+            if (getSharedPreferences("settings", MODE_PRIVATE).getBoolean("skipDone", true)) {
+                addOption("--download-archive", File(filesDir, "downloaded.txt").absolutePath)
+            }
             if (!trackMode) addOption(if (collection) "--yes-playlist" else "--no-playlist")
             // Signed in via "My YouTube": lets yt-dlp read private playlists (Sounds, Liked…)
             val cookies = YouTubeBrowserActivity.cookieFile(this@DownloadService)
@@ -247,6 +256,10 @@ class DownloadService : Service() {
         try {
             YoutubeDL.getInstance().execute(req, id, false) { progress, _, line ->
                 DownloadState.log(line)
+                if ("has already been recorded in the archive" in line) {
+                    skippedAll = true
+                    DownloadState.update { it.copy(status = "Already downloaded – skipped") }
+                }
                 if (!trackMode) itemRe.find(line)?.let { m ->
                     val i = m.groupValues[1].toInt()
                     val n = m.groupValues[2].toInt()

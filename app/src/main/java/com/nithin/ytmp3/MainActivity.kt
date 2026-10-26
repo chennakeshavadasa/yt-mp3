@@ -72,6 +72,10 @@ class MainActivity : AppCompatActivity() {
         urlInput = findViewById(R.id.urlInput)
         playlistSwitch = findViewById(R.id.playlistSwitch)
         qualityGroup = findViewById(R.id.qualityGroup)
+        findViewById<MaterialSwitch>(R.id.skipSwitch).apply {
+            isChecked = prefs.getBoolean("skipDone", true)
+            setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("skipDone", on).apply() }
+        }
         downloadBtn = findViewById(R.id.downloadBtn)
         cancelBtn = findViewById(R.id.cancelBtn)
         statusText = findViewById(R.id.statusText)

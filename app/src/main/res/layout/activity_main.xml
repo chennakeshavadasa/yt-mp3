@@ -79,6 +79,12 @@
                 android:layout_marginTop="8dp"
                 android:text="Download the whole playlist / channel" />
 
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/skipSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Skip songs I already downloaded" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
